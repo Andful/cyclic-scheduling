@@ -1,0 +1,5 @@
+{
+  "load_extensions": {
+    "cyclic_scheduling/extension": true
+  }
+}
