@@ -1,0 +1,40 @@
+actors:
+  - name: "x₁"
+    execution-time: 2
+    processor: "machine 1"
+  - name: "x₂"
+    execution-time: 3
+    processor: "machine 2"
+  - name: "x₃"
+    execution-time: 1
+    processor: "machine 2"
+  - name: "x₄"
+    execution-time: 2
+    processor: "machine 1"
+  - name: "x₅"
+    execution-time: 2
+    processor: "machine 1"
+    
+channels:
+  - source: "x₄"
+    target: "x₁"
+    initial-tokens: 1
+  - source: "x₁"
+    target: "x₂"
+    initial-tokens: 0
+  - source: "x₂"
+    target: "x₃"
+    initial-tokens: 0
+  - source: "x₅"
+    target: "x₃"
+    initial-tokens: 1
+  - source: "x₂"
+    target: "x₄"
+    initial-tokens: 0
+  - source: "x₅"
+    target: "x₄"
+    initial-tokens: 1
+  - source: "x₁"
+    target: "x₅"
+    initial-tokens: -1
+

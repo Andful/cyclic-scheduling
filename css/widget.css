@@ -1,4 +1,16 @@
-.custom-widget {
-  background-color: lightseagreen;
-  padding: 0px 2px;
+.plot-container {
+  height: 300px;
+}
+
+.plot-container svg {
+  width: 100%;
+  height: 100%;
+}
+
+.drag-panel {
+  cursor: grab;
+}
+
+body[data-dragging="1"] * {
+  cursor: grabbing !important;
 }

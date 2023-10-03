@@ -29,19 +29,19 @@
     "url": "https://github.com/Andful/cyclic-scheduling"
   },
   "scripts": {
-    "build": "yarn run build:lib && yarn run build:nbextension && yarn run build:labextension:dev",
-    "build:prod": "yarn run build:lib && yarn run build:nbextension && yarn run build:labextension",
+    "build": "npm run build:lib && npm run build:nbextension && npm run build:labextension:dev",
+    "build:prod": "npm run build:lib && npm run build:nbextension && npm run build:labextension",
     "build:labextension": "jupyter labextension build .",
     "build:labextension:dev": "jupyter labextension build --development True .",
     "build:lib": "tsc",
     "build:nbextension": "webpack",
-    "clean": "yarn run clean:lib && yarn run clean:nbextension && yarn run clean:labextension",
+    "clean": "npm run clean:lib && npm run clean:nbextension && npm run clean:labextension",
     "clean:lib": "rimraf lib",
     "clean:labextension": "rimraf cyclic_scheduling/labextension",
     "clean:nbextension": "rimraf cyclic_scheduling/nbextension/static/index.js",
     "lint": "eslint . --ext .ts,.tsx --fix",
     "lint:check": "eslint . --ext .ts,.tsx",
-    "prepack": "yarn run build:lib",
+    "prepack": "npm run build:lib",
     "test": "jest",
     "watch": "npm-run-all -p watch:*",
     "watch:lib": "tsc -w",
@@ -49,15 +49,17 @@
     "watch:labextension": "jupyter labextension watch ."
   },
   "dependencies": {
-    "@jupyter-widgets/base": "^1.1.10 || ^2 || ^3 || ^4 || ^5 || ^6"
+    "@jupyter-widgets/base": "^1.1.10 || ^2 || ^3 || ^4 || ^5 || ^6",
+    "d3": "^7.8.5"
   },
   "devDependencies": {
     "@babel/core": "^7.5.0",
     "@babel/preset-env": "^7.5.0",
     "@jupyter-widgets/base-manager": "^1.0.2",
-    "@jupyterlab/builder": "^3.0.0",
+    "@jupyterlab/builder": "^4.0.0",
     "@lumino/application": "^1.6.0",
     "@lumino/widgets": "^1.6.0",
+    "@types/d3": "^7.4.1",
     "@types/jest": "^26.0.0",
     "@types/webpack-env": "^1.13.6",
     "@typescript-eslint/eslint-plugin": "^3.6.0",

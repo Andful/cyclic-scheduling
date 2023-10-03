@@ -1,0 +1,39 @@
+actors:
+  - name: "x₁"
+    execution-time: 2
+    processor: "processor 1"
+    color: "#0b84a5"
+  - name: "x₂"
+    execution-time: 1
+    processor: "processor 2"
+    color: "#f6c85f"
+  - name: "x₃"
+    execution-time: 2
+    processor: "processor 1"
+    color: "#6f4e7c"
+  - name: "x₄"
+    execution-time: 2
+    processor: "processor 2"
+    color: "#9dd866"
+  - name: "x₅"
+    execution-time: 1
+    processor: "processor 2"
+    color: "#ca472f"
+    
+channels:
+  - source: "x₁"
+    target: "x₂"
+    initial-tokens: 0
+  - source: "x₂"
+    target: "x₃"
+    initial-tokens: 0
+  - source: "x₃"
+    target: "x₄"
+    initial-tokens: 0
+  - source: "x₄"
+    target: "x₅"
+    initial-tokens: 0
+  - source: "x₅"
+    target: "x₁"
+    initial-tokens: 2
+

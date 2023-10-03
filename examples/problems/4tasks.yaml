@@ -1,0 +1,33 @@
+actors:
+  - name: "x₁"
+    execution-time: 2
+    processor: "machine 1"
+    color: "#0b84a5"
+  - name: "x₂"
+    execution-time: 3
+    processor: "machine 2"
+    color: "#f6c85f"
+  - name: "x₃"
+    execution-time: 2
+    processor: "machine 1"
+    color: "#6f4e7c"
+  - name: "x₄"
+    execution-time: 2
+    processor: "machine 3"
+    color: "#9dd866"
+    
+channels:
+  - source: "x₁"
+    target: "x₂"
+    initial-tokens: 2
+  - source: "x₂"
+    target: "x₃"
+    initial-tokens: 0
+  - source: "x₃"
+    target: "x₄"
+    initial-tokens: 0
+  - source: "x₄"
+    target: "x₁"
+    initial-tokens: 0
+
+

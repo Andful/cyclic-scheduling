@@ -4,7 +4,7 @@
 # Copyright (c) Andrea Nardi.
 # Distributed under the terms of the Modified BSD License.
 
-from .example import ExampleWidget
+from .cyclic_schedule_problem import CyclicSchedulingProblem
 from ._version import __version__, version_info
 
 def _jupyter_labextension_paths():
@@ -21,7 +21,7 @@ def _jupyter_labextension_paths():
     """
     return [{
         'src': 'labextension',
-        'dest': 'cyclic-scheduling',
+        'dest': 'cyclic_scheduling',
     }]
 
 

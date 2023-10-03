@@ -37,6 +37,7 @@ module.exports = [
     devtool: 'source-map',
     externals,
     resolve,
+    mode: 'development'
   },
 
   /**

@@ -146,6 +146,10 @@ $RECYCLE.BIN/
 
 **/node_modules/
 cyclic_scheduling/nbextension/index.*
+yarn.lock
+.pnp.cjs
+.pnp.loader.mjs
+.yarn
 
 # Coverage data
 # -------------
