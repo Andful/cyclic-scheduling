@@ -15,4 +15,4 @@ Run the jupyter notebook at `./examples` with:
 jupyter notebook examples/
 ```
 
-The introduction notebook contains some introductory content.
+The `introduction.ipynb` notebook contains some introductory content.
