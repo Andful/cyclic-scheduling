@@ -32,7 +32,7 @@ def main():
         elif args.subcommand == "system-of-inequalities":
             print(data.systems_of_inequalities())
     elif args.command == "solve":
-        data.solve()
+        data.solution()
 
 if __name__ == "__main__":
     main()
