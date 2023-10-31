@@ -1,7 +1,8 @@
 from dataclasses import astuple, dataclass
 from typing import List, Dict, Any
 import numpy as np
-from itertools import permutations
+from itertools import permutations, chain, islice
+from collections import OrderedDict
 from ipywidgets import DOMWidget
 
 def format_add(i: int) -> str:
@@ -24,6 +25,7 @@ class Channel:
     source: int
     target: int
     initial_tokens: int
+    additional: bool
         
 
     @staticmethod
@@ -34,13 +36,39 @@ class Channel:
         assert source in actors_map, f"Actor {source} undefined"
         assert target in actors_map, f"Actor {target} undefined"
 
-        return Channel(actors_map[source], actors_map[target], data.get('initial-tokens', 0))
+        return Channel(actors_map[source], actors_map[target], data.get('initial-tokens', 0), False)
 
 @dataclass
 class CyclicSchedulingProblem:
     actors: List[Actor]
     channels: List[Channel]
-    processors: Dict[str, List[int]]
+    processors: OrderedDict[str, List[int]]
+
+    def __init__(self):
+        self.actors = []
+        self.channels = []
+        self.processors = OrderedDict()
+
+    def add_processor(self, processor: str):
+        if processor in self.processors:
+            raise ValueError(f"{processor} is already present")
+        self.processors = OrderedDict(chain(self.processors.items(), [(processor, [])]))
+
+    def add_actor(self, name: str, execution_time: int, processor: str, color: str = "#ffffff"):
+        if processor not in self.processors:
+            raise ValueError(f'No processor "{processor}"')
+        
+        self.processors = OrderedDict((p, (e if p != processor else list(chain(e, [len(self.actors)]))))  for (p, e) in self.processors.items())
+        self.actors = list(chain(self.actors, [Actor(name, execution_time, processor, color)]))
+
+    def add_channel(self, source: str, target: str, initial_tokens: int = 0):
+        source_index = list(islice((i for (i, a) in enumerate(self.actors) if a.name == source), 1))
+        target_index = list(islice((i for (i, a) in enumerate(self.actors) if a.name == target), 1))
+        if len(source_index) < 1:
+            raise ValueError(f'No source actor "{source}"')
+        if len(target_index) < 1:
+            raise ValueError(f'No target actor "{target}"')
+        self.channels = list(chain(self.channels, [Channel(source_index[0], target_index[0], initial_tokens, False)]))
 
     @staticmethod
     def validate_data(data: Any):
@@ -70,24 +98,41 @@ class CyclicSchedulingProblem:
         
         CyclicSchedulingProblem.validate_data(data)
 
-        actors = [Actor(a['name'], a['execution-time'], a['processor'], a.get('color', '#ffffff')) for a in data['actors']]
-        actors_map = dict((a['name'], i) for i,a in enumerate(data['actors']))
-        channels = [Channel.from_data(actors_map, c) for c in data['channels']]
-        processors = dict()
-        for i, actor in enumerate(data['actors']):
-            processor = actor['processor']
-            if processor in processors:
-                elements = processors[processor]
-            else:
-                elements = []
-                processors[processor] = elements
-            elements.append(i)
-        
-        return CyclicSchedulingProblem(actors, channels, processors)
+        result = CyclicSchedulingProblem()
 
-    def format_channel(self, c: Channel) -> str:
-            (source, target, initial_tokens) = astuple(c)
-            return f"{self.actors[target].name}(k) \u2265 {self.format_execution_time(self.actors[source].execution_time)}{self.actors[source].name}(k{self.format_initial_tokens(initial_tokens)})"
+        processors = set(actor['processor'] for actor in data['actors'])
+        for processor in processors:
+            result.add_processor(processor)
+
+        for actor in data['actors']:
+            result.add_actor(actor['name'], actor['execution-time'], actor['processor'], actor.get('color', '#ffffff'))
+
+        for channel in data['channels']:
+            result.add_channel(channel['source'], channel['target'], channel.get('initial-tokens', 0))
+        
+        return result
+    
+    @staticmethod
+    def _from_data(actors: List[Actor], channels: List[Channel], processors: OrderedDict[str, List[int]]) -> 'CyclicSchedulingProblem':
+        result = CyclicSchedulingProblem()
+        result.actors = actors
+        result.channels = channels
+        result.processors = processors
+
+        return result
+
+    def fire(self, name: str) -> 'CyclicSchedulingProblem':
+        index = next(i for (i, a) in enumerate(self.actors) if a.name == name)
+        def modify_channel(c: Channel) -> Channel:
+            if (c.source == index and c.target == index) or (c.source != index and c.target != index):
+                return c
+            (source, target, initial_tokens, additional) = astuple(c)
+            return Channel(source, target, (initial_tokens + 1) if source == index else (initial_tokens - 1), additional)
+        return CyclicSchedulingProblem._from_data(
+            self.actors,
+            list(map(modify_channel, self.channels)),
+            self.processors
+        )
 
     def max_plus(self) -> 'MaxPlus':        
         return MaxPlus(self)
@@ -100,58 +145,71 @@ class CyclicSchedulingProblem:
 
     def mip_formulation(self, relaxed=False) -> 'MipFormulation':
         return MipFormulation(self, relaxed)
-    
-    def additional_systems_of_inequalities(self, k: np.ndarray) -> str:
-        channels = [Channel(source, target, k[source, target]) for (_, actors) in self.processors.items() for (source, target) in permutations(actors, 2)]
-        return "\n".join(map(lambda c: self.format_channel(c), channels))
 
-
-    def dependencies_to_maxplus_matrix(self, channels: List[Channel]) -> np.ndarray:
-        result = np.fromiter(map(lambda _: None, range(4)), dtype=np.object_)
-    
-    def matrix(self) -> str:
-        possible_initial_tokens = set(c.initial_tokens for c in self.channels)
-        initial_token_map = { t: c for c in self.channels for t in possible_initial_tokens if c.initial_tokens == t }
-    
-    def solve(self, relaxed=False) -> 'CyclicSchedulingSolution':
-        from pulp import LpProblem, LpVariable, LpAffineExpression, LpMaximize, PULP_CBC_CMD
+    def solution(self, relaxed: bool) -> 'CyclicSchedulingSolution':
+        from pulp import LpProblem, LpVariable, LpAffineExpression, LpMaximize, GUROBI
 
         n_a = len(self.actors)
         problem = LpProblem(sense=LpMaximize)
         throughput = LpVariable("throughput", lowBound=0)
-        u = np.array([LpVariable(f"u({a})", lowBound=0) for a in map(lambda a: a.name, self.actors)])
-        if not relaxed:
-            k = np.array([[LpVariable(f"K({self.actors[i].name},{self.actors[j].name})", cat='Integer') if i < j and self.actors[i].processor == self.actors[j].processor else LpAffineExpression() for i in range(n_a)] for j in range(n_a)])
-            k = k + (np.triu(np.ones((n_a, n_a)), k=1) - k.T)
+        u = np.array([LpVariable(f"u({a})", lowBound=0) for a in map(lambda a: a.name, self.actors)])            
 
         problem.setObjective(throughput)
 
-        for (source, target, initial_tokens) in map(astuple, self.channels):
+        for (source, target, initial_tokens, _) in map(astuple, self.channels):
             execution_time = self.actors[source].execution_time
             problem += u[target] >= u[source] + throughput*execution_time - initial_tokens
 
         if not relaxed:
+            k = np.array([[LpVariable(f"K({self.actors[i].name},{self.actors[j].name})", cat='Integer') if i < j and self.actors[i].processor == self.actors[j].processor else LpAffineExpression() for i in range(n_a)] for j in range(n_a)])
+            k = k + (np.triu(np.ones((n_a, n_a)), k=1) - k.T)
             for (_, actors) in self.processors.items():
                 for (source, target) in permutations(actors, 2):
                     initial_tokens = k[source, target]
                     execution_time = self.actors[source].execution_time
                     problem += (u[target] >= u[source] + throughput*execution_time - initial_tokens)
-        problem.solve(PULP_CBC_CMD(msg=0))
+            for (_, actors) in self.processors.items():
+                cycle_time_lb = sum(map(lambda i: self.actors[i].execution_time, actors))
+                if cycle_time_lb > 0:
+                    problem += (cycle_time_lb*throughput <= 1)
+        problem.solve(GUROBI(msg=0))
 
-        get_continuous = np.vectorize(lambda x: x.value(), otypes=[float])
+        get_value = np.vectorize(lambda x: x.value())
 
         cycle_time = round(1/throughput.value())
+        u = get_value(u)
+        u = u - np.min(u)
 
-        processors = list(self.processors.keys())
-
+        if relaxed:
+            return CyclicSchedulingSolution(cycle_time, np.floor(cycle_time * u).tolist(), OrderedDict(), problem.solutionTime)
+        
+        k = get_value(k)
         return CyclicSchedulingSolution(
-            self,
-            [a.name for a in self.actors] if relaxed else processors,
-            [] if relaxed else [Channel(source, target, round(k[source, target].value())) for (_, actors) in self.processors.items() for (source, target) in permutations(actors, 2)], #todo fix
-            np.round(cycle_time*get_continuous(u)).astype(int).tolist(),
-            list(range(len(self.actors))) if relaxed else [processors.index(a.processor) for a in self.actors],
-            cycle_time
+            cycle_time,
+            np.floor(cycle_time * u).astype(int).tolist(),
+            {(source, target): round(k[source, target]) for (_, actors) in self.processors.items() for (source, target) in permutations(actors, 2)},
+            problem.solutionTime,
         )
+    
+    def solve(self) -> 'CyclicSchedulingProblem':
+        from itertools import chain
+        _, _, k, _ = astuple(self.solution(False))
+
+        def to_channel(e: tuple[tuple[int, int], int]) -> Channel:
+            ((source, target), initial_tokens) = e
+            return Channel(source, target, initial_tokens, True)
+        
+        return CyclicSchedulingProblem._from_data(
+            self.actors,
+            list(chain(self.channels, map(to_channel, k.items()))),
+            self.processors
+        )
+    
+    def plot_asap(self) -> 'CyclicSchedulingPlot':
+        return CyclicSchedulingPlot(self, False)
+    
+    def plot_with_processors(self) -> 'CyclicSchedulingPlot':
+        return CyclicSchedulingPlot(self, True)
     
     def _repr_svg_(self):
         import graphviz
@@ -160,43 +218,29 @@ class CyclicSchedulingProblem:
         for (i, e) in enumerate(self.actors):
             dot.node(str(i), f"{e.name}\n{e.execution_time}")
 
-        for (source, target, initial_tokens) in map(astuple, self.channels):
-            dot.edge(str(source), str(target), label=str(initial_tokens))
+        for (source, target, initial_tokens, additional) in map(astuple, self.channels):
+            dot.edge(str(source), str(target), label=str(initial_tokens), style="dashed" if additional else None)
 
         return dot._repr_image_svg_xml()
     
-    def solve_relaxation(self) -> 'CyclicSchedulingProblem':
-        return self.solve(relaxed=True)
+    def solve_relaxation(self) -> 'CyclicSchedulingSolution':
+        return self.solution(relaxed=True)
 
 @dataclass
 class CyclicSchedulingSolution:
-    problem: CyclicSchedulingProblem
-    processors: List[str]
-    additional_channels: List[Channel]
-    t: List[int]
-    actor2processors: Dict[int, int]
     cycle_time: int
+    t: List[int]
+    k: Dict[tuple[int, int], int]
+    solutionTime: int
 
-    def _repr_svg_(self):
-        import graphviz
+@dataclass
+class CyclicSchedulingPlotData:
+    problem: CyclicSchedulingProblem
+    cycle_time: int
+    processors: List[str]
+    t: List[int]
+    actor2processors: List[int]
 
-        dot = graphviz.Digraph()
-        for (i, e) in enumerate(self.problem.actors):
-            dot.node(str(i), f"{e.name}\n{e.execution_time}")
-
-        for (source, target, initial_tokens) in map(astuple, self.problem.channels):
-            dot.edge(str(source), str(target), label=str(initial_tokens) if initial_tokens != 0 else None)
-
-        for (source, target, initial_tokens) in map(astuple, self.additional_channels):
-            dot.edge(str(source), str(target), label=str(initial_tokens), style="dashed")
-
-        return dot._repr_image_svg_xml()
-    
-    def plot(self) -> 'CyclicSchedulingPlot':
-        from json import dumps
-        from dataclasses import asdict
-        return CyclicSchedulingPlot(dumps(asdict(self)))
-    
 class CyclicSchedulingPlot(DOMWidget):
     from traitlets import Unicode
     from ._frontend import module_name, module_version
@@ -209,10 +253,25 @@ class CyclicSchedulingPlot(DOMWidget):
     _view_module_version = Unicode(module_version).tag(sync=True)
     data = Unicode("data").tag(sync=True)
 
-    def __init__(self, data: str):
-        
+    def __init__(self, problem: CyclicSchedulingProblem, with_machine: bool = True):
+        import json
+        from dataclasses import asdict
+        cycle_time, t, _, _ = astuple(problem.solution(relaxed=True))
+
+        if with_machine:
+            processors = list(problem.processors.keys())
+            actor2processors = list([processors.index(e.processor) for e in problem.actors])
+        else:
+            processors = [a.name for a in problem.actors]
+            actor2processors = list(range(len(problem.actors)))
         super().__init__()
-        self.data = data
+        self.data = json.dumps(asdict(CyclicSchedulingPlotData(
+            problem,
+            cycle_time,
+            processors,
+            t,
+            actor2processors
+        )))
 
 @dataclass
 class MaxPlus:
@@ -231,12 +290,12 @@ class MaxPlus:
             return f"{t}"
 
     def format_channel(self, c: Channel) -> str:
-        (source, target, initial_tokens) = astuple(c)
+        (source, target, initial_tokens, _) = astuple(c)
         actors = self.problem.actors
         return f"{actors[target].name}(k) \u2265 {self.format_execution_time(actors[source].execution_time)}{actors[source].name}(k{format_add(-initial_tokens)})"
 
     def format_channel_latex(self, c: Channel) -> str:
-        (source, target, initial_tokens) = astuple(c)
+        (source, target, initial_tokens, _) = astuple(c)
         actors = self.problem.actors
         return f"{actors[target].name}(k) & \\ge & {self.format_execution_time_latex(actors[source].execution_time)}{actors[source].name}&(k{format_add(-initial_tokens)})"
 
@@ -258,12 +317,12 @@ class SystemOfInequalities:
             return f"{t} + "
 
     def format_channel(self, c: Channel) -> str:
-        (source, target, initial_tokens) = astuple(c)
+        (source, target, initial_tokens, _) = astuple(c)
         actors = self.problem.actors
         return f"{actors[target].name}(k) \u2265 {self.format_execution_time(actors[source].execution_time)}{actors[source].name}(k{format_add(-initial_tokens)})"
 
     def format_channel_latex(self, c: Channel) -> str:
-        (source, target, initial_tokens) = astuple(c)
+        (source, target, initial_tokens, _) = astuple(c)
         actors = self.problem.actors
         return f"{actors[target].name}(k) & \\ge & {self.format_execution_time(actors[source].execution_time)}{actors[source].name}&(k{format_add(-initial_tokens)})"
 
@@ -280,7 +339,7 @@ class MipFormulation:
     problem: CyclicSchedulingProblem
     relaxed: bool
     def format_channel(self, c: Channel) -> str:
-        (source, target, initial_tokens) = astuple(c)
+        (source, target, initial_tokens, _) = astuple(c)
         actors = self.problem.actors
         return f"u({actors[target].name}) \u2265 {actors[source].execution_time}t + u({actors[source].name}){format_add(-initial_tokens)}"
     def __repr__(self) -> str:

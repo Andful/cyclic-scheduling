@@ -15,12 +15,6 @@ import { MODULE_NAME, MODULE_VERSION } from './version';
 
 import '../css/widget.css';
 
-declare var MathJax: {
-  Hub: {
-    Queue: (_: ['Typeset', unknown, Element]) => void;
-  }
-}
-
 export class CyclicSchedulingPlotModel extends DOMWidgetModel {
   defaults() {
     return {
@@ -170,8 +164,6 @@ export class CyclicSchedulingPlotView extends DOMWidgetView {
         .exit()
         .remove()
 
-      console.log(data.actor2processors)
-
       barContent
         .select("g")
         .attr("transform",([_,t,i,k]) => `translate(${x(t + k * cycle_time)},${y(data.actor2processors[i]) ?? 0})`)
@@ -183,7 +175,8 @@ export class CyclicSchedulingPlotView extends DOMWidgetView {
             .select("rect")
             .attr("fill", a.color)
             .attr("width", x(t + a.execution_time) - x(t))
-            .attr("height", y.bandwidth());
+            .attr("height", y.bandwidth())
+            .attr("opacity", k >= 0 ? 1 : 0.5);
           
           elem
           .select("text")
@@ -202,9 +195,8 @@ export class CyclicSchedulingPlotView extends DOMWidgetView {
     dragPanel
       .on("wheel", (event: WheelEvent) => {
         event.preventDefault();
-        windowWidth = Math.max(Math.min(windowWidth + data.cycle_time * event.deltaY/1000, 10 * data.cycle_time), data.cycle_time);
+        windowWidth = Math.max(Math.min(windowWidth + data.cycle_time * event.deltaY/1000, 10 * data.cycle_time), data.cycle_time/10);
         plot();
-        console.log(`scrolling ${event.deltaY}`);
       })
       .on("mousedown", (startEvent: MouseEvent) => {
       const startOffset = offset;
@@ -229,7 +221,6 @@ export class CyclicSchedulingPlotView extends DOMWidgetView {
       if (!document.contains(this.el)) {
         return;
       }
-      console.log("inserted")
       plot();
       mo.disconnect();
     });
